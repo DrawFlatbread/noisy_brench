@@ -2,6 +2,8 @@ import torchvision.transforms as transforms
 from PIL import Image
 from torch.utils.data import Dataset, DataLoader
 import os, sys
+import numpy as np
+from torchnet.meter import AUCMeter
 
 
 class timyimagenet_dataset(Dataset):
@@ -40,16 +42,10 @@ class timyimagenet_dataset(Dataset):
                     pred_idx = pred.nonzero()[0]
                     self.probability = [probability[i] for i in pred_idx]   
                     
-                    clean = (np.array(noise_label)==np.array(train_label))                                                       
-                    auc_meter = AUCMeter()
-                    auc_meter.reset()
-                    auc_meter.add(probability,clean)        
-                    auc,_,_ = auc_meter.value()               
-                    sys.stdout.write('Numer of labeled samples:%d   AUC:%.3f\n'%(pred.sum(),auc))
                 elif self.mode == "unlabeled":
                     pred_idx = (1-pred).nonzero()[0]                                               
                 
-                self.train_imgs = train_imgs[pred_idx]
+                self.train_imgs = np.array(train_imgs)[pred_idx].tolist()
                 self.noise_label = [noise_label[i] for i in pred_idx]                          
                 print("%s data has a size of %d"%(self.mode,len(self.noise_label)))     
 
@@ -57,13 +53,13 @@ class timyimagenet_dataset(Dataset):
     def __getitem__(self, index):
         if self.mode=='labeled':
             img, target, prob = self.train_imgs[index], self.noise_label[index], self.probability[index]
-            img = Image.fromarray(img)
+            img = Image.open(img).convert('RGB')
             img1 = self.transform(img) 
             img2 = self.transform(img) 
             return img1, img2, target, prob            
         elif self.mode=='unlabeled':
             img = self.train_imgs[index]
-            img = Image.fromarray(img)
+            img = Image.open(img).convert('RGB')
             img1 = self.transform(img) 
             img2 = self.transform(img) 
             return img1, img2
@@ -132,15 +128,16 @@ class tinyimagenet_dataloader():
                 num_workers=self.num_workers,
                 pin_memory=True)
             return trainloader
+
         elif mode == 'train':
-            labeled_dataset = timyimagenet_dataset(transform=self.transform_train, mode="train", pred=pred, probability=prob)
+            labeled_dataset = timyimagenet_dataset(transform=self.transform_train, mode="labeled", pred=pred, probability=prob)
             labeled_loader = DataLoader(
                 dataset=labeled_dataset,
                 batch_size=self.batch_size,
                 shuffle=True,
                 num_workers=self.num_workers,
                 pin_memory=True)
-            unlabeled_dataset = timyimagenet_dataset(transform=self.transform_val, mode="val", pred=pred, probability=prob)
+            unlabeled_dataset = timyimagenet_dataset(transform=self.transform_val, mode="unlabeled", pred=pred, probability=prob)
             unlabeled_loader = DataLoader(
                 dataset=unlabeled_dataset,
                 batch_size=self.batch_size,
@@ -157,6 +154,7 @@ class tinyimagenet_dataloader():
                 shuffle=True,
                 num_workers=self.num_workers,
                 pin_memory=True)
+            return labeled_loader
 
         elif mode == 'val':
             val_dataset = timyimagenet_dataset(transform=self.transform_val,mode='val')

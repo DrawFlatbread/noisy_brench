@@ -4,4 +4,5 @@ wandb
 *.npy
 *.log
 data
+results
 *.txt

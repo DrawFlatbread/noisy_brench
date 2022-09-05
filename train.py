@@ -13,6 +13,7 @@ from PreResNet import *
 from sklearn.mixture import GaussianMixture
 from dataloader import *
 import wandb
+from pathlib import Path
 
 parser = argparse.ArgumentParser(description='PyTorch Training')
 parser.add_argument('--batch_size', default=64, type=int, help='train batchsize') 
@@ -27,6 +28,7 @@ parser.add_argument('--id', default='')
 parser.add_argument('--seed', default=123)
 parser.add_argument('--gpuid', default=0, type=int)
 parser.add_argument('--num_classes', default=0, type=int)
+parser.add_argument('--task', default='1', type=int)
 parser.add_argument('--datasets', default='5', type=str, help='path to dataset')
 args = parser.parse_args()
 
@@ -44,7 +46,7 @@ elif args.datasets == "6":
     args.num_classes = 200
     loader = task_1_6_dataloader(batch_size=args.batch_size, num_workers = 4)
 
-wandb.init(project="task1", entity="lifuguan", name="DivideMix_task{}_{}".format(1, args.datasets))
+wandb.init(project="task{}".format(args.task), entity="lifuguan", name="DivideMix_task{}_{}".format(args.task, args.datasets))
 wandb.config.update(args)
 
 def train(epoch,net,net2,optimizer,labeled_trainloader,unlabeled_trainloader):
@@ -148,7 +150,6 @@ def val(epoch,net1,net2):
             correct += predicted.eq(targets).cpu().sum().item()                 
     acc = 100.*correct/total
     sys.stdout.write("\n| Test Epoch #%d\t Accuracy: %.2f%%\n" %(epoch,acc))  
-    sys.stdout.write('Epoch:%d   Accuracy:%.2f\n'%(epoch,acc))
     wandb.log({'Accuracy':acc})
 
 
@@ -289,8 +290,16 @@ def get_label(net1,net2):
                 end_pre[n] = predicted[b]
                 n += 1            
 
-np.save('model.npy', net1.state_dict())
-end_pre = get_label(net1, net2, test_loader)
-end_pre = np.array(end_pre.cpu())
-np.save('label_test.npy', end_pre)
+save_path = Path('results/result_a/task{}/{}/'.format(args.task, args.datasets))
+
+if save_path.exists() is False:
+    save_path.mkdir(parents=True)
+np.save(save_path+'model.npy', net1.state_dict())
+end_pre_train = get_label(net1, net2, val_loader)
+end_pre_train = np.array(end_pre_train.cpu())
+np.save(save_path+'label_train.npy', end_pre_train)
+
+end_pre_test = get_label(net1, net2, test_loader)
+end_pre_test = np.array(end_pre_test.cpu())
+np.save(save_path+'label_test.npy', end_pre_test)
 
