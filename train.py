@@ -11,7 +11,7 @@ import argparse
 import numpy as np
 from PreResNet import *
 from sklearn.mixture import GaussianMixture
-from dataloader import *
+from dataloader import tinyimagenet_dataloader
 import wandb
 from pathlib import Path
 
@@ -23,12 +23,12 @@ parser.add_argument('--alpha', default=4, type=float, help='parameter for Beta')
 parser.add_argument('--lambda_u', default=25, type=float, help='weight for unsupervised loss')
 parser.add_argument('--p_threshold', default=0.5, type=float, help='clean probability threshold')
 parser.add_argument('--T', default=0.5, type=float, help='sharpening temperature')
-parser.add_argument('--num_epochs', default=300, type=int)
+parser.add_argument('--num_epochs', default=150, type=int)
 parser.add_argument('--id', default='')
 parser.add_argument('--seed', default=123)
 parser.add_argument('--gpuid', default=0, type=int)
 parser.add_argument('--num_classes', default=0, type=int)
-parser.add_argument('--task', default='1', type=int)
+parser.add_argument('--task', default='1', type=str)
 parser.add_argument('--datasets', default='5', type=str, help='path to dataset')
 args = parser.parse_args()
 
@@ -37,14 +37,10 @@ random.seed(args.seed)
 torch.manual_seed(args.seed)
 torch.cuda.manual_seed_all(args.seed)
 
-if args.datasets == "5":
-    warm_up = 30
-    args.num_classes = 200
-    loader = task_1_5_dataloader(batch_size=args.batch_size,num_workers = 4)
-elif args.datasets == "6":
-    warm_up = 30
-    args.num_classes = 200
-    loader = task_1_6_dataloader(batch_size=args.batch_size, num_workers = 4)
+
+warm_up = 30
+args.num_classes = 200
+loader = tinyimagenet_dataloader(batch_size=args.batch_size,num_workers = 4, task=int(args.task), sub_task=int(args.datasets))
 
 wandb.init(project="task{}".format(args.task), entity="lifuguan", name="DivideMix_task{}_{}".format(args.task, args.datasets))
 wandb.config.update(args)
@@ -200,6 +196,23 @@ def linear_rampup(current, warm_up, rampup_length=16):
     current = np.clip((current-warm_up) / rampup_length, 0.0, 1.0)
     return args.lambda_u*float(current)
 
+def get_label(net1,net2, val_loader):
+    net1.eval()
+    net2.eval()
+    end_pre = torch.zeros(len(val_loader.dataset))
+    n = 0
+    with torch.no_grad():
+        for _, (inputs, useless_label) in enumerate(val_loader):
+            inputs= inputs.cuda()
+            outputs1 = net1(inputs)
+            outputs2 = net2(inputs)           
+            outputs = outputs1+outputs2
+            _, predicted = torch.max(outputs, 1) 
+            for b in range(inputs.size(0)):
+                end_pre[n] = predicted[b]
+                n += 1       
+    return end_pre
+
 class SemiLoss(object):
     def __call__(self, outputs_x, targets_x, outputs_u, targets_u, epoch, warm_up):
         probs_u = torch.softmax(outputs_u, dim=1)
@@ -238,7 +251,7 @@ all_loss = [[],[]] # save the history of losses from two networks
 
 for epoch in range(args.num_epochs+1):   
     lr=args.lr
-    if epoch >= 150:
+    if epoch >= 75:
         lr /= 10      
     for param_group in optimizer1.param_groups:
         param_group['lr'] = lr       
@@ -247,7 +260,7 @@ for epoch in range(args.num_epochs+1):
     test_loader = loader.run('test')
     evaltrain_loader = loader.run('eval_train')   
     val_loader = loader.run('val')   
-    
+
     if epoch<warm_up:       
         warmup_trainloader = loader.run('warmup')
         print('Warmup Net1')
@@ -273,33 +286,21 @@ for epoch in range(args.num_epochs+1):
 
     val(epoch,net1,net2)  
 
+    if (epoch+1) % 30 == 0:
+        save_path = Path('results/result_a/task{}/{}/'.format(args.task, args.datasets))
 
-def get_label(net1,net2):
-    net1.eval()
-    net2.eval()
-    end_pre = torch.zeros(len(test_loader.dataset))
-    n = 0
-    with torch.no_grad():
-        for _, (inputs) in enumerate(val_loader):
-            inputs= inputs.cuda()
-            outputs1 = net1(inputs)
-            outputs2 = net2(inputs)           
-            outputs = outputs1+outputs2
-            _, predicted = torch.max(outputs, 1) 
-            for b in range(inputs.size(0)):
-                end_pre[n] = predicted[b]
-                n += 1            
+        if save_path.exists() is False:
+            save_path.mkdir(parents=True)
+        np.save(save_path.as_posix()+'/model.npy', net1.state_dict())
+        end_pre_train = get_label(net1, net2, val_loader)
+        end_pre_train = np.array(end_pre_train.cpu())
+        np.save(save_path.as_posix()+'/label_train.npy', end_pre_train)
 
-save_path = Path('results/result_a/task{}/{}/'.format(args.task, args.datasets))
+        end_pre_test = get_label(net1, net2, test_loader)
+        end_pre_test = np.array(end_pre_test.cpu())
+        np.save(save_path.as_posix()+'/label_test.npy', end_pre_test)
 
-if save_path.exists() is False:
-    save_path.mkdir(parents=True)
-np.save(save_path+'model.npy', net1.state_dict())
-end_pre_train = get_label(net1, net2, val_loader)
-end_pre_train = np.array(end_pre_train.cpu())
-np.save(save_path+'label_train.npy', end_pre_train)
 
-end_pre_test = get_label(net1, net2, test_loader)
-end_pre_test = np.array(end_pre_test.cpu())
-np.save(save_path+'label_test.npy', end_pre_test)
+    
+
 
