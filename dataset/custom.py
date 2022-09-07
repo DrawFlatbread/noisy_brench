@@ -8,10 +8,9 @@ class TaskDataset(Dataset):
         self.transform = transform
         self.mode = mode
 
-        self.val_dir = 'data/tiny-imagenet-200/val'
-
         self.annotation_path = 'data/task{}/{}/data/'.format(task, sub_task)
 
+        print("| Training on datasts : " + self.annotation_path + " |")
         if self.mode == 'test':
             self.test_imgs = []
             with open(self.annotation_path + 'test_label1.txt','r') as f:

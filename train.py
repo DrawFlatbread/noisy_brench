@@ -202,7 +202,9 @@ def get_label(net1,net2, val_loader):
     end_pre = torch.zeros(len(val_loader.dataset))
     n = 0
     with torch.no_grad():
-        for _, (inputs, useless_label) in enumerate(val_loader):
+        for _, (inputs) in enumerate(val_loader):
+            if len(inputs) > 1:
+                inputs = inputs[0]
             inputs= inputs.cuda()
             outputs1 = net1(inputs)
             outputs2 = net2(inputs)           
@@ -260,6 +262,7 @@ for epoch in range(args.num_epochs+1):
     test_loader = loader.run('test')
     evaltrain_loader = loader.run('eval_train')   
     val_loader = loader.run('val')   
+
 
     if epoch<warm_up:       
         warmup_trainloader = loader.run('warmup')
