@@ -5,11 +5,12 @@ import numpy as np
 
 class TaskDataset(Dataset):
     def __init__(self, transform, mode, pred=[], probability=[], task=1, sub_task=5):
-        self.transform = transform
-        self.mode = mode
 
         self.annotation_path = 'data/task{}/{}/data/'.format(task, sub_task)
 
+    def init_configure(self, transform, mode, pred, probability):
+        self.transform = transform
+        self.mode = mode
         print("| Training on datasts : " + self.annotation_path + " |")
         if self.mode == 'test':
             self.test_imgs = []
@@ -45,7 +46,7 @@ class TaskDataset(Dataset):
                 
                 self.train_imgs = np.array(train_imgs)[pred_idx].tolist()
                 self.noise_label = [noise_label[i] for i in pred_idx]                          
-                print("%s data has a size of %d"%(self.mode,len(self.noise_label)))     
+                print("%s data has a size of %d"%(self.mode,len(self.noise_label)))  
 
 
     def __getitem__(self, index):

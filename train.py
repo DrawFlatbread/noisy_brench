@@ -28,10 +28,14 @@ parser.add_argument('--id', default='')
 parser.add_argument('--seed', default=123)
 parser.add_argument('--gpuid', default=0, type=int)
 parser.add_argument('--num_classes', default=0, type=int)
-parser.add_argument('--task', default='1', type=str)
+parser.add_argument('--task', default='2', type=str)
 parser.add_argument('--datasets', default='5', type=str, help='path to dataset')
 args = parser.parse_args()
 
+if args.task == '2':
+    total_data_szie = 21600
+else:
+    total_data_szie = 100000
 torch.cuda.set_device(args.gpuid)
 random.seed(args.seed)
 torch.manual_seed(args.seed)
@@ -172,7 +176,7 @@ def warmup(epoch,net,optimizer,dataloader, net_name):
 
 def eval_train(model,all_loss):    
     model.eval()
-    losses = torch.zeros(100000)    
+    losses = torch.zeros(total_data_szie)    
     with torch.no_grad():
         for batch_idx, (inputs, targets, index) in enumerate(evaltrain_loader):
             inputs, targets = inputs.cuda(), targets.cuda() 
@@ -196,15 +200,30 @@ def linear_rampup(current, warm_up, rampup_length=16):
     current = np.clip((current-warm_up) / rampup_length, 0.0, 1.0)
     return args.lambda_u*float(current)
 
-def get_label(net1,net2, val_loader):
+def get_train_label(net1,net2, val_loader):
+    net1.eval()
+    net2.eval()
+    end_pre = torch.zeros(len(val_loader.dataset))
+    n = 0
+    with torch.no_grad():
+        for _, (inputs, _) in enumerate(val_loader):
+            inputs= inputs.cuda()
+            outputs1 = net1(inputs)
+            outputs2 = net2(inputs)           
+            outputs = outputs1+outputs2
+            _, predicted = torch.max(outputs, 1) 
+            for b in range(inputs.size(0)):
+                end_pre[n] = predicted[b]
+                n += 1       
+    return end_pre
+
+def get_test_label(net1,net2, val_loader):
     net1.eval()
     net2.eval()
     end_pre = torch.zeros(len(val_loader.dataset))
     n = 0
     with torch.no_grad():
         for _, (inputs) in enumerate(val_loader):
-            if len(inputs) > 1:
-                inputs = inputs[0]
             inputs= inputs.cuda()
             outputs1 = net1(inputs)
             outputs2 = net2(inputs)           
@@ -251,6 +270,7 @@ if args.noise_mode=='asym':
 
 all_loss = [[],[]] # save the history of losses from two networks
 
+
 for epoch in range(args.num_epochs+1):   
     lr=args.lr
     if epoch >= 75:
@@ -294,12 +314,12 @@ for epoch in range(args.num_epochs+1):
 
         if save_path.exists() is False:
             save_path.mkdir(parents=True)
-        np.save(save_path.as_posix()+'/model.npy', net1.state_dict())
-        end_pre_train = get_label(net1, net2, val_loader)
+        # np.save(save_path.as_posix()+'/model.npy', net1.state_dict())
+        end_pre_train = get_train_label(net1, net2, val_loader)
         end_pre_train = np.array(end_pre_train.cpu())
         np.save(save_path.as_posix()+'/label_train.npy', end_pre_train)
 
-        end_pre_test = get_label(net1, net2, test_loader)
+        end_pre_test = get_test_label(net1, net2, test_loader)
         end_pre_test = np.array(end_pre_test.cpu())
         np.save(save_path.as_posix()+'/label_test.npy', end_pre_test)
 
