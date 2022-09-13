@@ -24,6 +24,8 @@
             "console": "integratedTerminal",
             "justMyCode": false,
             "args": [
+                "--task",
+                "2",
                 "--datasets",
                 "5"
             ]

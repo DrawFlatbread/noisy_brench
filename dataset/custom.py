@@ -7,6 +7,7 @@ class TaskDataset(Dataset):
     def __init__(self, transform, mode, pred=[], probability=[], task=1, sub_task=5):
 
         self.annotation_path = 'data/task{}/{}/data/'.format(task, sub_task)
+        self.init_configure(transform, mode, pred, probability)
 
     def init_configure(self, transform, mode, pred, probability):
         self.transform = transform

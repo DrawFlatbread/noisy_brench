@@ -32,19 +32,32 @@ parser.add_argument('--task', default='2', type=str)
 parser.add_argument('--datasets', default='5', type=str, help='path to dataset')
 args = parser.parse_args()
 
-if args.task == '2':
-    total_data_szie = 21600
-else:
-    total_data_szie = 100000
+total_data_szie = len(open('data/task{}/{}/data/label.txt'.format(args.task, args.datasets),'rU').readlines())
+warm_up = 30
+if args.datasets == '1' or args.datasets == '2':
+    args.num_classes = 10
+elif args.datasets == '3' or args.datasets == '4':
+    args.num_classes = 100
+elif args.datasets == '5' or args.datasets == '6':
+    args.num_classes = 200
+loader = tinyimagenet_dataloader(batch_size=args.batch_size,num_workers = 4, task=int(args.task), sub_task=int(args.datasets))
+# if args.task == '2':
+#     if args.datasets == '3' or args.datasets == '4':
+#         total_data_szie = 50000
+#     if args.datasets == '5' or args.datasets == '6':
+#         total_data_szie = 21600
+# elif args.task == '1':
+#     if args.datasets == '3' or args.datasets == '4':
+#         total_data_szie = 50000
+#     if args.datasets == '5' or args.datasets == '6':
+#         total_data_szie = 100000
+
 torch.cuda.set_device(args.gpuid)
 random.seed(args.seed)
 torch.manual_seed(args.seed)
 torch.cuda.manual_seed_all(args.seed)
 
 
-warm_up = 30
-args.num_classes = 200
-loader = tinyimagenet_dataloader(batch_size=args.batch_size,num_workers = 4, task=int(args.task), sub_task=int(args.datasets))
 
 wandb.init(project="task{}".format(args.task), entity="lifuguan", name="DivideMix_task{}_{}".format(args.task, args.datasets))
 wandb.config.update(args)
