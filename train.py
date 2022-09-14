@@ -11,7 +11,7 @@ import argparse
 import numpy as np
 from PreResNet import *
 from sklearn.mixture import GaussianMixture
-from dataloader import tinyimagenet_dataloader
+from dataloader import dividemix_dataloader
 import wandb
 from pathlib import Path
 
@@ -23,7 +23,7 @@ parser.add_argument('--alpha', default=4, type=float, help='parameter for Beta')
 parser.add_argument('--lambda_u', default=25, type=float, help='weight for unsupervised loss')
 parser.add_argument('--p_threshold', default=0.5, type=float, help='clean probability threshold')
 parser.add_argument('--T', default=0.5, type=float, help='sharpening temperature')
-parser.add_argument('--num_epochs', default=150, type=int)
+parser.add_argument('--num_epochs', default=300, type=int)
 parser.add_argument('--id', default='')
 parser.add_argument('--seed', default=123)
 parser.add_argument('--gpuid', default=0, type=int)
@@ -34,13 +34,24 @@ args = parser.parse_args()
 
 total_data_szie = len(open('data/task{}/{}/data/label.txt'.format(args.task, args.datasets),'rU').readlines())
 warm_up = 30
-if args.datasets == '1' or args.datasets == '2':
-    args.num_classes = 10
-elif args.datasets == '3' or args.datasets == '4':
-    args.num_classes = 100
-elif args.datasets == '5' or args.datasets == '6':
-    args.num_classes = 200
-loader = tinyimagenet_dataloader(batch_size=args.batch_size,num_workers = 4, task=int(args.task), sub_task=int(args.datasets))
+if args.task == '1' or args.task == '2' or args.task == '3':
+    if args.datasets == '1' or args.datasets == '2':
+        args.num_classes = 10
+    elif args.datasets == '3' or args.datasets == '4':
+        args.num_classes = 100
+    elif args.datasets == '5' or args.datasets == '6':
+        args.num_classes = 200
+elif args.task == '4':
+    if args.datasets == '1':
+        args.num_classes = 50
+    elif args.datasets == '2':
+        args.num_classes = 100
+    elif args.datasets == '3':
+        args.num_classes = 50
+loader = dividemix_dataloader(batch_size=args.batch_size,num_workers=4, task=int(args.task), sub_task=int(args.datasets))
+
+
+
 # if args.task == '2':
 #     if args.datasets == '3' or args.datasets == '4':
 #         total_data_szie = 50000
@@ -292,9 +303,11 @@ for epoch in range(args.num_epochs+1):
         param_group['lr'] = lr       
     for param_group in optimizer2.param_groups:
         param_group['lr'] = lr          
-    test_loader = loader.run('test')
     evaltrain_loader = loader.run('eval_train')   
     val_loader = loader.run('val')   
+    test_loader = loader.run('test')
+    if args.task == '4':
+        web_test_loader = loader.run('web_test')
 
 
     if epoch<warm_up:       
@@ -332,11 +345,16 @@ for epoch in range(args.num_epochs+1):
         end_pre_train = np.array(end_pre_train.cpu())
         np.save(save_path.as_posix()+'/label_train.npy', end_pre_train)
 
-        end_pre_test = get_test_label(net1, net2, test_loader)
-        end_pre_test = np.array(end_pre_test.cpu())
-        np.save(save_path.as_posix()+'/label_test.npy', end_pre_test)
 
-
-    
-
+        if args.task == '1' or args.task == '2' or args.task == '3':
+            end_pre_test = get_test_label(net1, net2, test_loader)
+            end_pre_test = np.array(end_pre_test.cpu())
+            np.save(save_path.as_posix()+'/label_test.npy', end_pre_test)
+        elif args.task == '4':
+            end_pre_test = get_test_label(net1, net2, test_loader)
+            end_pre_test = np.array(end_pre_test.cpu())
+            np.save(save_path.as_posix()+'/label_test_web.npy', end_pre_test)
+            end_pre_web = get_test_label(net1, net2, web_test_loader)
+            end_pre_web = np.array(end_pre_web.cpu())
+            np.save(save_path.as_posix()+'/label_test_img.npy', end_pre_web)
 

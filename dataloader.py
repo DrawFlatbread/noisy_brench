@@ -3,7 +3,7 @@ from torch.utils.data import DataLoader
 
 import dataset
 
-class tinyimagenet_dataloader():
+class dividemix_dataloader():
     def __init__(self, batch_size, num_workers, task=1, sub_task=5):
         self.batch_size = batch_size
         self.num_workers = num_workers
@@ -31,7 +31,10 @@ class tinyimagenet_dataloader():
                                       ])
         self.task = task
         self.sub_task = sub_task
-        self.dataset = dataset.custom.TaskDataset
+        if task == 1 or task == 2 or task == 3:
+            self.dataset = dataset.custom.TaskDataset
+        else:
+            self.dataset = dataset.custom.WebDataset
 
 
     def run(self, mode, pred=[],prob=[]):
@@ -91,6 +94,12 @@ class tinyimagenet_dataloader():
                 num_workers=self.num_workers,
                 pin_memory=True)
             return test_loader
-
-
-
+        elif mode == 'web_test':
+            web_test_dataset = self.dataset(transform=self.transform_test, mode='web_test', task=self.task, sub_task=self.sub_task)
+            web_test_loader = DataLoader(
+                dataset=web_test_dataset,
+                batch_size=self.batch_size,
+                shuffle=False,
+                num_workers=self.num_workers,
+                pin_memory=True)
+            return web_test_loader
